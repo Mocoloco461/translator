@@ -1,14 +1,18 @@
 const searchInput = document.getElementById("search");
 const langList = document.getElementById("languages");
+const enableToggle = document.getElementById("enableToggle");
 let languages = [];
 
-// Load languages and stored selection
+// Load languages, stored selection, and enabled state
 Promise.all([
     fetch("languages.json").then(res => res.json()),
-    chrome.storage.sync.get("targetLang")
+    chrome.storage.sync.get(["targetLang", "extensionEnabled"])
 ]).then(([langs, storage]) => {
     languages = langs;
     renderList(languages, storage.targetLang);
+    // Default to enabled if not set
+    const isEnabled = storage.extensionEnabled !== undefined ? storage.extensionEnabled : true;
+    enableToggle.checked = isEnabled;
 });
 
 function renderList(items, selectedCode) {
@@ -53,5 +57,13 @@ searchInput.addEventListener("input", (e) => {
     // Optimization: pass current selected from DOM or memory.
     chrome.storage.sync.get("targetLang", ({ targetLang }) => {
         renderList(filtered, targetLang);
+    });
+});
+
+// Handle toggle state changes
+enableToggle.addEventListener("change", (e) => {
+    const isEnabled = e.target.checked;
+    chrome.storage.sync.set({ extensionEnabled: isEnabled }, () => {
+        console.log("Extension enabled state set to:", isEnabled);
     });
 });
