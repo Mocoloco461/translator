@@ -6,6 +6,15 @@ document.addEventListener("mouseup", async (e) => {
   const text = window.getSelection().toString().trim();
   if (!text) return;
 
+  // Check if extension is enabled
+  const { extensionEnabled } = await chrome.storage.sync.get("extensionEnabled");
+  const isEnabled = extensionEnabled !== undefined ? extensionEnabled : true;
+  
+  if (!isEnabled) {
+    // Extension is disabled, do nothing
+    return;
+  }
+
   // Clear previous if any
   if (hoverHost) {
     hoverHost.remove();

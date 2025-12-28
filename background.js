@@ -5,11 +5,27 @@ chrome.runtime.onInstalled.addListener(() => {
         title: "Translate Selection",
         contexts: ["selection"]
     });
+    
+    // Initialize default enabled state if not set
+    chrome.storage.sync.get("extensionEnabled", ({ extensionEnabled }) => {
+        if (extensionEnabled === undefined) {
+            chrome.storage.sync.set({ extensionEnabled: true });
+        }
+    });
 });
 
 // Context Menu Listener
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     if (info.menuItemId === "translate-selection" && info.selectionText) {
+        // Check if extension is enabled
+        const { extensionEnabled } = await chrome.storage.sync.get("extensionEnabled");
+        const isEnabled = extensionEnabled !== undefined ? extensionEnabled : true;
+        
+        if (!isEnabled) {
+            // Extension is disabled, do nothing
+            return;
+        }
+        
         // We use the same service, but inject the result directly
         performTranslation(info.selectionText).then(translated => {
             if (translated) {
@@ -26,7 +42,18 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 // Message Listener (For Content Script)
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.type === "TRANSLATE" && request.text) {
-        performTranslation(request.text).then(sendResponse);
+        // Check if extension is enabled
+        chrome.storage.sync.get("extensionEnabled", ({ extensionEnabled }) => {
+            const isEnabled = extensionEnabled !== undefined ? extensionEnabled : true;
+            
+            if (!isEnabled) {
+                // Extension is disabled, return empty response
+                sendResponse("");
+                return;
+            }
+            
+            performTranslation(request.text).then(sendResponse);
+        });
         return true; // Keep channel open for async response
     }
 });
