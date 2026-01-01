@@ -1,24 +1,28 @@
 console.log("Hover Translator Loaded");
 
 let hoverHost = null;
+let cleanupHover = null; // Global cleanup function to prevent zombie listeners
 
 document.addEventListener("mouseup", async (e) => {
+  // If clicking on the existing popup (shadow DOM host), ignore
+  // This prevents the "drag release" from triggering a new translation
+  if (hoverHost && e.target === hoverHost) return;
+
   const text = window.getSelection().toString().trim();
   if (!text) return;
 
   // Check if extension is enabled
   const { extensionEnabled } = await chrome.storage.sync.get("extensionEnabled");
   const isEnabled = extensionEnabled !== undefined ? extensionEnabled : true;
-  
+
   if (!isEnabled) {
     // Extension is disabled, do nothing
     return;
   }
 
-  // Clear previous if any
-  if (hoverHost) {
-    hoverHost.remove();
-    hoverHost = null;
+  // Clear previous if any, using the robust cleanup
+  if (cleanupHover) {
+    cleanupHover();
   }
 
   try {
@@ -49,6 +53,7 @@ document.addEventListener("mouseup", async (e) => {
 });
 
 function showHoverResult(text, x, y, isError) {
+  // Double check cleanup
   if (hoverHost) hoverHost.remove();
 
   hoverHost = document.createElement("div");
@@ -77,37 +82,132 @@ function showHoverResult(text, x, y, isError) {
             max-width: 300px;
             opacity: 0;
             transform: translateY(10px);
-            transition: all 0.2s ease-out;
+            transition: opacity 0.2s ease-out, transform 0.2s ease-out;
             pointer-events: auto;
             font-size: 14px;
             line-height: 1.5;
+            cursor: move; /* Indicate draggable */
+            user-select: none; /* Prevent text selection during drag start */
         }
         .card.visible { opacity: 1; transform: translateY(0); }
         .card.error { border-color: #ff4444; background: rgba(50, 10, 10, 0.95); }
+        
+        .close-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 16px;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            padding: 0;
+        }
+        .close-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+        }
     `;
   shadow.appendChild(style);
 
   const card = document.createElement("div");
   card.className = "card" + (isError ? " error" : "");
-  card.textContent = text;
+
+  // Close Button
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "close-btn";
+  closeBtn.textContent = "×";
+  // Stop propagation to prevent drag start when clicking close
+  closeBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+  card.appendChild(closeBtn);
+
+  const content = document.createElement("div");
+  content.textContent = text;
+  // Add padding to content to avoid overlap with close button
+  content.style.paddingRight = "20px";
+  card.appendChild(content);
 
   // Position
-  style.textContent += `.card { top: ${y + 15}px; left: ${x}px; }`;
+  card.style.top = `${y + 15}px`;
+  card.style.left = `${x}px`;
 
   shadow.appendChild(card);
   requestAnimationFrame(() => card.classList.add("visible"));
 
-  // Remove on any click
+  // Drag Logic
+  let isDragging = false;
+  let startX, startY, initialLeft, initialTop;
+
+  // Attach drag listener to the CARD itself
+  card.addEventListener("mousedown", (e) => {
+    // Don't drag if clicking buttons/interactive elements
+    if (e.target.tagName === 'BUTTON') return;
+
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    const rect = card.getBoundingClientRect();
+    initialLeft = rect.left;
+    initialTop = rect.top;
+
+    // Remove transition during drag for responsiveness
+    card.style.transition = "none";
+
+    e.preventDefault(); // Prevent selection
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  });
+
+  const onMouseMove = (e) => {
+    if (!isDragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    card.style.left = `${initialLeft + dx}px`;
+    card.style.top = `${initialTop + dy}px`;
+  };
+
+  const onMouseUp = () => {
+    isDragging = false;
+    // Restore transition
+    card.style.transition = "opacity 0.2s ease-out, transform 0.2s ease-out";
+
+    document.removeEventListener("mousemove", onMouseMove);
+    document.removeEventListener("mouseup", onMouseUp);
+  };
+
+  // Define the cleanup function
   const removeHover = () => {
     if (hoverHost) {
       card.classList.remove("visible");
-      setTimeout(() => { if (hoverHost) hoverHost.remove(); hoverHost = null; }, 200);
+      // Use a local reference to the host to remove, to avoid race conditions
+      const hostToRemove = hoverHost;
+      setTimeout(() => {
+        if (hostToRemove) hostToRemove.remove();
+        if (hoverHost === hostToRemove) hoverHost = null;
+      }, 200);
     }
-    document.removeEventListener("click", removeHover);
+    cleanupHover = null;
   };
 
-  // Add listener after a short delay to avoid immediate removal from the selection click
-  setTimeout(() => {
-    document.addEventListener("click", removeHover);
-  }, 100);
+  // Close button listener
+  closeBtn.addEventListener("click", removeHover);
+
+  // Assign to global cleanup
+  cleanupHover = () => {
+    // Force remove immediately for cleanup
+    if (hoverHost) {
+      hoverHost.remove();
+      hoverHost = null;
+    }
+    cleanupHover = null;
+  };
 }
