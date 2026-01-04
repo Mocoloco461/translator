@@ -166,8 +166,8 @@ function showHoverResult(text, x, y, isError) {
     startY = e.clientY;
 
     const rect = card.getBoundingClientRect();
-    initialLeft = rect.left;
-    initialTop = rect.top;
+    initialLeft = rect.left + window.scrollX;
+    initialTop = rect.top + window.scrollY;
 
     card.style.transition = "none";
     e.preventDefault();
