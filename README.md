@@ -36,6 +36,22 @@ The extension defaults to **Hebrew**. To change it:
 *   Hover over the popup to keep it open.
 *   Click the **"X"** button to close it immediately.
 
+## Translation API
+
+This extension uses **Google Translate's unofficial public API** for translation. Specifically:
+
+-   **API Endpoint**: `https://translate.googleapis.com/translate_a/single`
+-   **Authentication**: **No API key or token required** - this is a free, public endpoint
+-   **Client Parameter**: Uses `client=gtx` to access Google's free translation service
+-   **Source Language**: Set to `auto` for automatic detection
+-   **Target Language**: Configurable through the extension popup (defaults to Hebrew)
+
+**Important Notes:**
+-   This is an **unofficial API** endpoint that Google provides for their own web services
+-   No authentication, registration, or API limits to worry about
+-   The API is free and doesn't require any API tokens or credentials
+-   Translation happens directly from the browser without any intermediary servers
+
 ## Troubleshooting
 
 **"Extension context invalidated" / Error Messages**

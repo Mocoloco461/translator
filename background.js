@@ -60,11 +60,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 // Centralized Translation Logic
+// Uses Google Translate's free, unofficial public API (no authentication required)
+// See README.md "Translation API" section for more details
 async function performTranslation(text) {
     try {
         const data = await chrome.storage.sync.get("targetLang");
         const tl = data.targetLang || "he";
 
+        // Google Translate unofficial API endpoint (client=gtx for free access)
         const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
         const res = await fetch(url);
         const json = await res.json();
