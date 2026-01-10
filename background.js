@@ -32,7 +32,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
                 chrome.scripting.executeScript({
                     target: { tabId: tab.id },
                     func: showTranslationResult,
-                    args: [translated]
+                    args: [translated, info.selectionText]
                 });
             }
         });
@@ -83,7 +83,7 @@ async function performTranslation(text) {
 }
 
 // Result UI (Injected via Scripting)
-function showTranslationResult(text) {
+function showTranslationResult(text, originalText) {
     const existingHost = document.getElementById("ctx-translator-host");
     if (existingHost) existingHost.remove();
 
@@ -128,12 +128,30 @@ function showTranslationResult(text) {
         .content { font-size: 16px; line-height: 1.6; color: #f3f4f6; }
         .close-btn { background: none; border: none; color: #6b7280; cursor: pointer; padding: 4px; border-radius: 4px; transition: color 0.2s; display: flex; align-items: center; justify-content: center; }
         .close-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
+        .speaker-btn { background: rgba(255, 255, 255, 0.1); border: none; border-radius: 6px; color: #fff; cursor: pointer; padding: 8px; transition: background 0.2s; display: flex; align-items: center; justify-content: center; margin-top: 8px; }
+        .speaker-btn:hover { background: rgba(255, 255, 255, 0.2); }
+        .speaker-btn:active { background: rgba(255, 255, 255, 0.3); }
         svg { width: 20px; height: 20px; }
     `;
     shadow.appendChild(style);
 
     const container = document.createElement("div");
     container.className = "container";
+    
+    let speakerButtonHtml = '';
+    if (originalText && !text.startsWith("Error:")) {
+        speakerButtonHtml = `
+            <button class="speaker-btn" id="speaker">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                </svg>
+                <span style="margin-left: 8px;">Pronounce in English</span>
+            </button>
+        `;
+    }
+    
     container.innerHTML = `
         <div class="header">
             <span class="title">Translation</span>
@@ -142,6 +160,7 @@ function showTranslationResult(text) {
             </button>
         </div>
         <div class="content">${text}</div>
+        ${speakerButtonHtml}
     `;
     shadow.appendChild(container);
 
@@ -154,6 +173,18 @@ function showTranslationResult(text) {
     };
 
     container.querySelector("#close").onclick = close;
+    
+    // Add speaker button listener if it exists
+    const speakerBtn = container.querySelector("#speaker");
+    if (speakerBtn && originalText) {
+        speakerBtn.onclick = (e) => {
+            e.stopPropagation();
+            const utterance = new SpeechSynthesisUtterance(originalText);
+            utterance.lang = 'en-US';
+            speechSynthesis.speak(utterance);
+        };
+    }
+    
     let timer = setTimeout(close, 6000);
     container.onmouseenter = () => clearTimeout(timer);
     container.onmouseleave = () => timer = setTimeout(close, 6000);
