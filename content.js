@@ -61,7 +61,7 @@ document.addEventListener("mouseup", async (e) => {
         if (!response) return;
 
         const isError = response.startsWith("Error:");
-        showHoverResult(response, e.pageX, e.pageY, isError);
+        showHoverResult(response, e.pageX, e.pageY, isError, text);
       }
     );
   } catch (err) {
@@ -73,7 +73,7 @@ document.addEventListener("mouseup", async (e) => {
    Popup Rendering
 ========================= */
 
-function showHoverResult(text, x, y, isError) {
+function showHoverResult(text, x, y, isError, originalText) {
   // Safety cleanup
   if (hoverHost) hoverHost.remove();
 
@@ -93,6 +93,15 @@ function showHoverResult(text, x, y, isError) {
   document.body.appendChild(hoverHost);
 
   const shadow = hoverHost.attachShadow({ mode: "open" });
+
+  // Check pronunciation setting
+  chrome.storage.sync.get("pronunciationEnabled", ({ pronunciationEnabled }) => {
+    const isPronunciationEnabled = pronunciationEnabled !== undefined ? pronunciationEnabled : true;
+    renderPopup(shadow, text, x, y, isError, originalText, isPronunciationEnabled);
+  });
+}
+
+function renderPopup(shadow, text, x, y, isError, originalText, isPronunciationEnabled) {
 
   /* =========================
      Styles
@@ -132,6 +141,45 @@ function showHoverResult(text, x, y, isError) {
       border-color: #ff4444;
       background: rgba(50, 10, 10, 0.95);
     }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .card-content {
+      flex: 1;
+    }
+
+    .speaker-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      cursor: pointer;
+      padding: 6px;
+      transition: background 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .speaker-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .speaker-btn:active {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    .speaker-btn svg {
+      width: 16px;
+      height: 16px;
+    }
   `;
   shadow.appendChild(style);
 
@@ -142,9 +190,36 @@ function showHoverResult(text, x, y, isError) {
   const card = document.createElement("div");
   card.className = "card" + (isError ? " error" : "");
 
+  const header = document.createElement("div");
+  header.className = "card-header";
+
   const content = document.createElement("div");
+  content.className = "card-content";
   content.textContent = text;
-  card.appendChild(content);
+  header.appendChild(content);
+
+  // Add speaker button only if we have original text, it's not an error, and pronunciation is enabled
+  if (originalText && !isError && isPronunciationEnabled) {
+    const speakerBtn = document.createElement("button");
+    speakerBtn.className = "speaker-btn";
+    speakerBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+      </svg>
+    `;
+    speakerBtn.title = "Pronounce in English";
+    speakerBtn.onclick = (e) => {
+      e.stopPropagation();
+      const utterance = new SpeechSynthesisUtterance(originalText);
+      utterance.lang = 'en-US';
+      speechSynthesis.speak(utterance);
+    };
+    header.appendChild(speakerBtn);
+  }
+
+  card.appendChild(header);
 
   // Initial position near cursor
   card.style.top = `${y + 15}px`;

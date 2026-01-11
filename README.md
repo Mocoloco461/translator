@@ -9,6 +9,7 @@ A simple, lightweight Chrome Extension to translate text instantly. Supports **H
 -   **130+ Languages**: Supports all Google Translate languages (Afrikaans to Zulu).
 -   **Auto-Detection**: Automatically detects the source language.
 -   **Dark Mode UI**: Beautiful glassmorphism design that fits any website.
+-   **Pronunciation**: Click the speaker icon to hear the English pronunciation of the selected text.
 
 ## Installation
 
