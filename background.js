@@ -67,12 +67,27 @@ async function performTranslation(text) {
         const data = await chrome.storage.sync.get("targetLang");
         const tl = data.targetLang || "he";
 
+        const primaryResult = await translateWithGoogle(text, tl);
+        if (primaryResult.translated) return primaryResult.translated;
+
+        const fallbackResult = await translateWithMyMemory(text, tl);
+        if (fallbackResult.translated) return fallbackResult.translated;
+
+        return `Error: ${fallbackResult.error || primaryResult.error || "Translation failed"}`;
+    } catch (err) {
+        console.error("Translation failed:", err);
+        return `Error: ${err.message}`; // Return error to caller
+    }
+}
+
+async function translateWithGoogle(text, tl) {
+    try {
         const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
         const res = await fetch(url);
         const rawBody = await res.text();
 
         if (!res.ok) {
-            return `Error: Translation service returned HTTP ${res.status}`;
+            return { error: `Primary translation service returned HTTP ${res.status}` };
         }
 
         let json;
@@ -81,9 +96,9 @@ async function performTranslation(text) {
         } catch {
             const looksLikeHtml = rawBody.trim().startsWith("<");
             if (looksLikeHtml) {
-                return "Error: Translation service returned an unexpected HTML response";
+                return { error: "Primary translation service returned an unexpected HTML response" };
             }
-            return "Error: Translation service returned invalid JSON";
+            return { error: "Primary translation service returned invalid JSON" };
         }
 
         let translated = "";
@@ -92,10 +107,42 @@ async function performTranslation(text) {
                 if (seg && seg[0]) translated += seg[0];
             });
         }
-        return translated;
+
+        if (translated.trim()) {
+            return { translated };
+        }
+        return { error: "Primary translation service returned an empty translation" };
     } catch (err) {
-        console.error("Translation failed:", err);
-        return `Error: ${err.message}`; // Return error to caller
+        return { error: `Primary translation service failed: ${err.message}` };
+    }
+}
+
+async function translateWithMyMemory(text, tl) {
+    try {
+        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=auto|${encodeURIComponent(tl)}`;
+        const res = await fetch(url);
+        const rawBody = await res.text();
+
+        if (!res.ok) {
+            return { error: `Fallback translation service returned HTTP ${res.status}` };
+        }
+
+        let json;
+        try {
+            json = JSON.parse(rawBody);
+        } catch {
+            return { error: "Fallback translation service returned invalid JSON" };
+        }
+
+        const translated = json?.responseData?.translatedText?.trim();
+        if (translated) {
+            return { translated };
+        }
+
+        const details = json?.responseDetails?.trim();
+        return { error: details || "Fallback translation service returned an empty translation" };
+    } catch (err) {
+        return { error: `Fallback translation service failed: ${err.message}` };
     }
 }
 
