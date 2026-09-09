@@ -69,7 +69,22 @@ async function performTranslation(text) {
 
         const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
         const res = await fetch(url);
-        const json = await res.json();
+        const rawBody = await res.text();
+
+        if (!res.ok) {
+            return `Error: Translation service returned HTTP ${res.status}`;
+        }
+
+        let json;
+        try {
+            json = JSON.parse(rawBody);
+        } catch {
+            const looksLikeHtml = rawBody.trim().startsWith("<");
+            if (looksLikeHtml) {
+                return "Error: Translation service returned an unexpected HTML response";
+            }
+            return "Error: Translation service returned invalid JSON";
+        }
 
         let translated = "";
         if (json && json[0]) {
@@ -161,9 +176,10 @@ function showTranslationResult(text, originalText, isPronunciationEnabled) {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
         </div>
-        <div class="content">${text}</div>
+        <div class="content" id="translated-content"></div>
         ${speakerButtonHtml}
     `;
+    container.querySelector("#translated-content").textContent = text;
     shadow.appendChild(container);
 
     requestAnimationFrame(() => container.classList.add("visible"));
